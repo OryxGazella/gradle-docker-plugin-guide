@@ -45,7 +45,11 @@ include::build.gradle[tag=imports]
 
 == Create Tasks
 
-We want to create and configure tasks to create and verify the image and test the application running in the  container. This will also require tasks to create a container from the image, start the container, stop the container, and remove the container.
+We want to create and configure tasks to create and verify the image and test the application running in the  container. 
+
+This will also require tasks to create a container from the image, start the container, stop the container, and remove the container.
+
+NOTE: It is important that in the case where the tests fail we still want the tasks that stop and remove the container to execute. Gradle does provide for this cleanup.
 
 === [[dockerBuildImage]]Configure the Docker image names
 
@@ -127,13 +131,15 @@ include::build.gradle[tag=removeContainer]
 == [[testContainer]]Create testContainer task
 This task tests a connection to the container and then invokes the API and verifies the outcome.
 
+We want to stop and remove the container even if this task fails. We use `finalizedBy` to indicate which task to add to the task graph when this task is scheduled to execute.
+
 [source,groovy]
 ----
 include::build.gradle[tag=testContainer]
 ----
 <1> The task depends on the xref:verifyImage[`verifyImage`] and xref:startContainer[`startContainer`] tasks.
 <2> We assign the task to the group named `verification`. This is a conventional Gradle group for tasks related to unit testing and integration testing.
-<3> We want to stop and remove the container even if this task fails. Use `finalizedBy` to ensure xref:removeContainer[`removeContainer`] is added to the task graph when this task is going to run.
+<3> Use `finalizedBy` to ensure xref:removeContainer[`removeContainer`] is executed.
 <4> Verify that we can connect to the running container.
 <5> Verify that the POST operation responds as expected.
 <6> Verify that the JSON representation of the response matches the expectations.
@@ -149,11 +155,11 @@ include::build.gradle[tag=testContainer]
 
 You can create integration tests that use link:https://www.testcontainers.org/[TestContainers] with your image to perform a range of tests. The integration tests will execute after the image has been built.
 
-You can publish the image to a container register using the link:https://bmuschko.github.io/gradle-docker-plugin/api/com/bmuschko/gradle/docker/tasks/image/DockerPushImage.html[`DockerPushImage`] task.
+You can publish the image to a container registry using the link:https://bmuschko.github.io/gradle-docker-plugin/api/com/bmuschko/gradle/docker/tasks/image/DockerPushImage.html[`DockerPushImage`] task.
 
 == Summary
 
-You are now able to create an image and test the application inside a container based on the image.
+You are now able to create an image and test the application by running a container based on the image.
 
 The family of Docker plugins for Gradle consist of 3 plugins that use the Docker Java Library to invoke the Docker Remote API.
 
@@ -161,7 +167,7 @@ The family of Docker plugins for Gradle consist of 3 plugins that use the Docker
 * link:https://plugins.gradle.org/plugin/com.bmuschko.docker-spring-boot-application[docker-spring-boot-application] plugin
 * link:https://plugins.gradle.org/plugin/com.bmuschko.docker-java-application[docker-java-application] plugin
 
-The link:https://bmuschko.github.io/gradle-docker-plugin/current/user-guide/[user guide] will provide a lot more information how to extend you configuration.
+The link:https://bmuschko.github.io/gradle-docker-plugin/current/user-guide/[user guide] will provide more information on how to extend your configuration.
 
 If you create link:https://docs.gradle.org/current/userguide/java_testing.html#sec:configuring_java_integration_tests[integration tests] you should add xref:startContainer[`startContainer`] as a dependency of your task and finalize the task using xref:removeContainer[`removeContainer`].
 
