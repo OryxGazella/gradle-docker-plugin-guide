@@ -1,0 +1,168 @@
+:docinfo: shared
+
+= Using the Docker Gradle Plugin
+
+This guide demonstrates using the family of Gradle plugins for Docker that can be found at link:https://github.com/bmuschko/gradle-docker-plugin[github.com/bmuschko/gradle-docker-plugin]
+
+
+== Introduction
+We will show you how to use the link:https://plugins.gradle.org/plugin/com.bmuschko.docker-spring-boot-application[`docker-spring-boot-application`]  plugin to create a Docker image and the link:https://plugins.gradle.org/plugin/com.bmuschko.docker-remote-api[`docker-remote-api`] plugin to create, start, test, stop and remove a container.
+
+We are assuming you have a project for a Spring Boot Application and that you used Gradle to build the application. Now you want to create a Docker image to run as a container.
+
+The Spring Boot Gradle plugin since 2.3 includes support for creating a Docker image. So we are assuming you have a project that is using an older version of Spring Boot.
+
+Our sample application exposes a simple API. We want to verify that the application starts up and responds to HTTP requests after the container is started.
+
+== What you'll build
+You will add plugins and tasks to an existing Spring Boot Gradle project to create an image. You will also add tasks to create, start, test and destroy a container from the image.
+
+== What you'll need
+* A text editor or IDE like link:https://www.jetbrains.com/idea/download/[IntelliJ IDEA], link:https://spring.io/tools[Spring Tools 4 for Eclipse] or link:https://www.eclipse.org/downloads/packages/[Eclipse with Buildship]
+* A Java Development Kit (JDK) version 8 or higher. You will find an extensive list at link:https://foojay.io/almanac/jdk-8/[foojay]
+
+== Adding the plugins
+
+Add the Spring Boot Application and the Docker Remote API plugins
+
+[source,groovy]
+----
+include::build.gradle[tag=plugins]
+----
+<1> Spring Boot, Spring Dependency Management, and Kotlin plugins
+<2> Application specific plugin
+<3> Docker Spring Boot Application plugin
+<4> Docker Remote API plugin
+
+== Adding imports
+
+Add imports for the Docker Remote API tasks.
+
+[source,groovy]
+----
+include::build.gradle[tag=imports]
+----
+
+== Create Tasks
+
+We want to create and configure tasks to create and verify the image and test the application running in the  container. This will also require tasks to create a container from the image, start the container, stop the container, and remove the container.
+
+=== [[dockerBuildImage]]Configure the Docker image names
+
+The Spring Boot Application plugin will provide a task named `dockerBuildImage`, to configure the `springBootApplication` plugin with the names to tag the image we use:
+
+[source,groovy]
+----
+include::build.gradle[tag=dockerImageNames]
+----
+<1> We define a variable to hold a set of names for the image tags.
+<2> Assign the names to the `images` property.
+
+
+NOTE: We declared a variable `dockerImagesNames` with the names for use in the configuration of the `springBootApplication` plugin and the  xref:verifyImage[`verifyImage`] task
+
+=== [[verifyImage]]Create verifyImage task
+
+This is a simple task that verifies the image tags.
+
+[source,groovy]
+----
+include::build.gradle[tag=verifyImage]
+----
+
+<1> This task depends on the xref:dockerBuildImage[`dockerBuildImage`] task.
+<2> We use the variable previously defined to verify that the image has been tagged properly.
+
+TIP: Use `$name:` when logging to ensure the task name is included.
+
+=== [[createContainer]]Create createContainer task
+
+This task creates a Docker container from the built image.
+
+[source,groovy]
+----
+include::build.gradle[tag=createContainer]
+----
+
+<1> The task type is https://bmuschko.github.io/gradle-docker-plugin/api/com/bmuschko/gradle/docker/tasks/container/DockerCreateContainer.html[`DockerCreateContainer`].
+<2> The task depends on the xref:dockerBuildImage[`dockerBuildImage`] task.
+<3> We assign `dockerBuildImage.imageId` to `targetImageId`
+
+== [[startContainer]]Create startContainer task
+This task will start the container.
+
+[source,groovy]
+----
+include::build.gradle[tag=startContainer]
+----
+<1> The task type is link:https://bmuschko.github.io/gradle-docker-plugin/api/com/bmuschko/gradle/docker/tasks/container/DockerStartContainer.html[`DockerStartContainer`]
+<2> The task depends on xref:createContainer[`createContainer`]
+<3> We assign `createContainer.contrainerId` to `targetContainerId`
+
+NOTE: `onComplete` is invoked when the specific task has completed.
+
+== [[stopContainer]]Create stopContainer task
+This task will stop the container.
+
+[source,groovy]
+----
+include::build.gradle[tag=stopContainer]
+----
+<1> The task type is https://bmuschko.github.io/gradle-docker-plugin/api/com/bmuschko/gradle/docker/tasks/container/DockerStopContainer.html[`DockerStopContainer`].
+<2> We assign `createContainer.containerId` to `targetContainerId`.
+<3> We chose a wait time of 15 seconds for the container to stop.
+
+== [[removeContainer]]Create removeContainer task
+This task removes the container.
+
+[source,groovy]
+----
+include::build.gradle[tag=removeContainer]
+----
+<1> The task type is https://bmuschko.github.io/gradle-docker-plugin/api/com/bmuschko/gradle/docker/tasks/container/DockerRemoveContainer.html[`DockerRemoveContainer`].
+<2> The task depends on xref:stopContainer[`stopContainer`]
+<3> We assign `createContainer.containerId` to the `targetContainerId`.
+
+
+== [[testContainer]]Create testContainer task
+This task tests a connection to the container and then invokes the API and verifies the outcome.
+
+[source,groovy]
+----
+include::build.gradle[tag=testContainer]
+----
+<1> The task depends on the xref:verifyImage[`verifyImage`] and xref:startContainer[`startContainer`] tasks.
+<2> We assign the task to the group named `verification`. This is a conventional Gradle group for tasks related to unit testing and integration testing.
+<3> We want to stop and remove the container even if this task fails. Use `finalizedBy` to ensure xref:removeContainer[`removeContainer`] is added to the task graph when this task is going to run.
+<4> Verify that we can connect to the running container.
+<5> Verify that the POST operation responds as expected.
+<6> Verify that the JSON representation of the response matches the expectations.
+<7> Adding this task as a dependency of `check` ensures it will run when using `check` or `build` as Gradle tasks.
+
+== Execute the build
+[source,bash]
+----
+./gradlew build
+----
+
+== What else?
+
+You can create integration tests that use link:https://www.testcontainers.org/[TestContainers] with your image to perform a range of tests. The integration tests will execute after the image has been built.
+
+You can publish the image to a container register using the link:https://bmuschko.github.io/gradle-docker-plugin/api/com/bmuschko/gradle/docker/tasks/image/DockerPushImage.html[`DockerPushImage`] task.
+
+== Summary
+
+You are now able to create an image and test the application inside a container based on the image.
+
+The family of Docker plugins for Gradle consist of 3 plugins that use the Docker Java Library to invoke the Docker Remote API.
+
+* link:https://plugins.gradle.org/plugin/com.bmuschko.docker-remote-api[docker-remote-api] plugin
+* link:https://plugins.gradle.org/plugin/com.bmuschko.docker-spring-boot-application[docker-spring-boot-application] plugin
+* link:https://plugins.gradle.org/plugin/com.bmuschko.docker-java-application[docker-java-application] plugin
+
+The link:https://bmuschko.github.io/gradle-docker-plugin/current/user-guide/[user guide] will provide a lot more information how to extend you configuration.
+
+If you create link:https://docs.gradle.org/current/userguide/java_testing.html#sec:configuring_java_integration_tests[integration tests] you should add xref:startContainer[`startContainer`] as a dependency of your task and finalize the task using xref:removeContainer[`removeContainer`].
+
+You can use the link:https://plugins.gradle.org/plugin/com.bmuschko.docker-remote-api[docker-remote-api] plugin to create any kind of docker image and execute end-to-end, or integration tests as needed.
